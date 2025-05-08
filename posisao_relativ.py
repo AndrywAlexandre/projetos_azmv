@@ -5,9 +5,12 @@ import numpy as np
 from mediapipe import solutions
 from mediapipe.framework.formats import landmark_pb2
 
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+
 
 file_name= 'IMG_2149.mov'
-
+model_path = "pose_landmarker_lite.task"
 
 def draw_landmarks_on_image(rgb_image, detection_result):
   pose_landmarks_list = detection_result.pose_landmarks
@@ -30,21 +33,43 @@ def draw_landmarks_on_image(rgb_image, detection_result):
   return annotated_image
 
 
-cap= cv2.VideoCapture(file_name)
+# Cria a base_options com o modelo
+base_options = python.BaseOptions(model_asset_path=model_path)
 
-options = python.vision.PoseLandmarkerOptions()
+# Agora cria o options corretamente
+options = vision.PoseLandmarkerOptions(
+    base_options=python.BaseOptions(model_asset_path=model_path),
+    running_mode=vision.RunningMode.VIDEO
+)
 
-#Comando para execultar o video com sua abertura e seu fechamento
-while (cap.isOpened()):
-    ret, frame=cap.read()
-#comando ate o primero brack para parar o video usando o 'Q'
-    if ret == True:
-        cv2.imshow('Frame',frame)
+'''options = python.vision.PoseLandmarkerOptions(
+   base_options = python.BaseOptions(model_asset_path=model_path),
+   #definir como será o processamento da imagem com a IA
+   running_mode=python.vision.RunningMode.VIDEO
+)'''
 
-        if cv2.waitKey(25) & 0xFF == ord('q'):
+with python.vision.PoseLandmarker.create_from_options(options) as landmarker:
+    cap= cv2.VideoCapture(file_name)
+    calc_ts=[0.0]
+    #Comando para execultar o video com sua abertura e seu fechamento
+    while (cap.isOpened()):
+        ret, frame=cap.read()
+        fps = cap.get(cv2.CAP_PREOP_FPS)
+        
+    #comando ate o primero brack para parar o video usando o 'Q'
+        if ret == True:
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+            #time stamp
+            calc_ts.append(int(calc_ts[-1] + 1000/fps))
+            landmarker.process(frame)
+
+            detection_result = landmarker.detect_for_video(mp_image,calc_ts[-1])
+            cv2.imshow('Frame',frame)
+
+            if cv2.waitKey(25) & 0xFF == ord('q'):
+                break
+        else:
             break
-    else:
-        break
 cap.release()
 
 cv2.destroyAllWindows()
